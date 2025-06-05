@@ -56,3 +56,5 @@ with 50,000 timesteps, we still can't win 1% of games. I suspect that action-mas
 - The way the game is intended to be played is to choose a date and construct a solution around it. The environment is not currently structured this way.
 - Reviewing the goal of this project: you enter the date, the model finds a (all) solution(s).
 - The environment is currently organized to solve a simpler problem: find *any* solution, whether or not it's a valid date.
+- A revised reward system could immediately solve everything. Reward it highly for not leaving contiguous groups of <=4 cells (which immediately invalidate the game).
+- As-is, the reward model misguided: winning the game shouldn't be so valuable. Placing a first piece shouldn't be valuable.
