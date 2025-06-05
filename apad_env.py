@@ -4,20 +4,41 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 PIECES = {
-    'K': [(0,0), (1,0), (2,0), (3,0), (2,1)],   # __|_ knee
-    'A': [(0,0), (1,0), (1,1), (2,1), (3,1)],   # __|- Asp
-    'C': [(0,0), (0,1), (1,0), (2,0), (2,1)],   # C
-    'L': [(0,0), (1,0), (2,0), (2,1), (2,2)],   # |__  L
-    'R': [(0,0), (0,1), (1,0), (1,1), (2,0), (2,1)],   # [] rectangle
-    'P': [(0,0), (0,1), (1,0), (1,1), (2,0)],   # P
-    'I': [(0,0), (0,1), (1,0), (2,0), (3,0)],   # |_ I
-    'Z': [(0,0), (0,1), (1,1), (2,1), (2,2)],   # Z
+    'K': [(0,0), (1,0), (2,0), (3,0), (2,1)],   # __|_ knee           0-343
+    'A': [(0,0), (1,0), (1,1), (2,1), (3,1)],   # __|- Asp            344-686
+    'C': [(0,0), (0,1), (1,0), (2,0), (2,1)],   # C                   687-1030
+    'L': [(0,0), (1,0), (2,0), (2,1), (2,2)],   # |__  L              1031-1374
+    'R': [(0,0), (0,1), (1,0), (1,1), (2,0), (2,1)],  # [] rectangle  1375-1718
+    'P': [(0,0), (0,1), (1,0), (1,1), (2,0)],   # P                   1719-2062
+    'I': [(0,0), (0,1), (1,0), (2,0), (3,0)],   # |_ I                2063-2406
+    'Z': [(0,0), (0,1), (1,1), (2,1), (2,2)],   # Z                   2407-2751
 }
+
+
+def decode_action(action):
+   piece_id = action // (2 * 4 * 43)
+   remaining = action % (2 * 4 * 43)
+   chirality = remaining // (4 * 43)
+   remaining = remaining % (4 * 43)
+   rotation = remaining // 43
+   position = remaining % 43
+   
+   row, col = divmod(position, 7)
+   
+   return {
+       'piece_id': piece_id,
+       'chirality': chirality, 
+       'rotation': rotation,
+       'position': position,
+       'grid_pos': (row, col)
+   }
 
 class APADEnv(gym.Env):
     def __init__(self):
        super().__init__()
-       
+
+       self.piece_names = ['K','A','C','L','R','P','I','Z']
+        
        # 7x7 grid with 6 invalid spaces (43 valid total)
        self.grid_size = 7
        self.valid_spaces = 43
@@ -56,8 +77,7 @@ class APADEnv(gym.Env):
     
     def _get_piece_coords(self, piece_id, chirality, rotation):
        # Get base piece coordinates
-       piece_names = ['K', 'L', 'A', 'C', 'P', 'Z', 'I', 'R']
-       base_coords = PIECES[piece_names[piece_id]]
+       base_coords = PIECES[self.piece_names[piece_id]]
        
        coords = base_coords.copy()
        
@@ -106,6 +126,17 @@ class APADEnv(gym.Env):
        
        self.remaining_pieces[piece_id] = False
 
+    def _has_valid_moves(self):
+        for piece_id in range(8):
+            if not self.remaining_pieces[piece_id]:
+                continue
+            for chirality in range(2):
+                for rotation in range(4):
+                    for position in range(43):
+                        if self._is_valid_placement(piece_id, chirality, rotation, position):
+                            return True
+        return False
+        
     # The action passed will be an integer 0 - 2751, spanning the action space.
     # This covers all the possible actions: piece ID (8) x chirality (2) x rotation (4)  x position (43) = 2752
     def step(self, action):
@@ -127,14 +158,17 @@ class APADEnv(gym.Env):
         
         # Place piece
         self._place_piece(piece_id, chirality, rotation, position)
-        
-        # Calculate reward and done
-        reward = 10
+    
+        # Check win condition
         done = np.sum(self.remaining_pieces) == 0
         if done:
-            reward += 100  # Big bonus for solving
+            return self._get_obs(), 100, True, False, {}
         
-        return self._get_obs(), reward, done, False, {}
+        # Check if stuck (no more valid moves)
+        if not self._has_valid_moves():
+            return self._get_obs(), -5, False, True, {}
+        
+        return self._get_obs(), 10, False, False, {}
 
     def visualize(self):
        fig, ax = plt.subplots(figsize=(6,6))
@@ -176,3 +210,34 @@ class APADEnv(gym.Env):
     def visualize_ascii(self):
         for row in self.grid:
             print(''.join(['O' if x==0 else 'X' if x==-1 else str(x) for x in row]))
+
+    def decode_action_verbose(self, action):
+        move = decode_action(action)
+        move['piece_name'] = self.piece_names[move['piece_id']]
+        return move
+    
+    def visualize_piece(self, action):
+        move = self.decode_action_verbose(action)
+        coords = self._get_piece_coords(move['piece_id'], move['chirality'], move['rotation'])
+        
+        # Create 5x5 grid (should fit any piece)
+        grid = np.zeros((5, 5))
+        for r, c in coords:
+           if 0 <= r < 5 and 0 <= c < 5:
+               grid[r, c] = 1
+        
+        fig, ax = plt.subplots(figsize=(3, 3))
+        display = np.ones((*grid.shape, 3))
+        display[grid == 1] = [0.5, 0.5, 0.5]
+        
+        ax.imshow(display)
+        
+        # Grid lines
+        for i in range(6):
+           ax.axhline(i - 0.5, color='gray', linewidth=1)
+           ax.axvline(i - 0.5, color='gray', linewidth=1)
+        
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_title(f"Piece {move['piece_name']} (C:{move['chirality']}, R:{move['rotation']})")
+        plt.show()
