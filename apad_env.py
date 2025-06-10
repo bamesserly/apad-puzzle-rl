@@ -2,6 +2,7 @@ import gymnasium as gym
 import numpy as np
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.ndimage import label
 
 PIECES = {
     'K': [(0,0), (1,0), (2,0), (3,0), (2,1)],   # __|_ knee           0-343
@@ -15,23 +16,14 @@ PIECES = {
 }
 
 
-def decode_action(action):
-   piece_id = action // (2 * 4 * 43)
-   remaining = action % (2 * 4 * 43)
-   chirality = remaining // (4 * 43)
-   remaining = remaining % (4 * 43)
-   rotation = remaining // 43
-   position = remaining % 43
-   
-   row, col = divmod(position, 7)
-   
-   return {
-       'piece_id': piece_id,
-       'chirality': chirality, 
-       'rotation': rotation,
-       'position': position,
-       'grid_pos': (row, col)
-   }
+def has_islands(grid):
+    labeled_array, num_features = label(grid == 0)
+            
+    # Count cells in each island
+    island_sizes = np.bincount(labeled_array.ravel())[1:]
+            
+    # Check if any islands have 4 or fewer cells
+    return np.any((island_sizes >= 2) & (island_sizes <= 4))
 
 class APADEnv(gym.Env):
     def __init__(self):
@@ -63,7 +55,7 @@ class APADEnv(gym.Env):
            self.grid[pos] = -1
        
        self.remaining_pieces = np.ones(8, dtype=bool)
-    
+        
     def _get_obs(self):
         return np.concatenate([self.grid.flatten(), self.remaining_pieces.astype(np.int8)])
     
@@ -136,39 +128,38 @@ class APADEnv(gym.Env):
                         if self._is_valid_placement(piece_id, chirality, rotation, position):
                             return True
         return False
-        
+    
     # The action passed will be an integer 0 - 2751, spanning the action space.
     # This covers all the possible actions: piece ID (8) x chirality (2) x rotation (4)  x position (43) = 2752
     def step(self, action):
-        # Decode action
-        piece_id = action // (2 * 4 * 43)
-        remaining = action % (2 * 4 * 43)
-        chirality = remaining // (4 * 43)
-        remaining = remaining % (4 * 43)
-        rotation = remaining // 43
-        position = remaining % 43
+
+        move = self.decode_action(action)
         
         # Check piece available
-        if not self.remaining_pieces[piece_id]:
-           return self._get_obs(), -10, False, False, {}
+        if not self.remaining_pieces[move['piece_id']]:
+           return self._get_obs(), -0.5, False, False, {}
         
         # Check valid placement
-        if not self._is_valid_placement(piece_id, chirality, rotation, position):
-           return self._get_obs(), -1, False, False, {}
+        if not self._is_valid_placement(move['piece_id'], move['chirality'], move['rotation'], move['position']):
+           return self._get_obs(), -0.1, False, False, {}
         
         # Place piece
-        self._place_piece(piece_id, chirality, rotation, position)
-    
+        self._place_piece(move['piece_id'], move['chirality'], move['rotation'], move['position'])
+            
         # Check win condition
         done = np.sum(self.remaining_pieces) == 0
         if done:
-            return self._get_obs(), 100, True, False, {}
+            return self._get_obs(), 200, True, False, {"terminal_observation": self._get_obs()}
+
+        # Check bricked game
+        if has_islands(self.grid):
+            return self._get_obs(), -50, False, True, {"terminal_observation": self._get_obs()}
+            
+        ## Check if stuck (no more valid moves)
+        #if not self._has_valid_moves():
+        #    return self._get_obs(), -5, False, True, {"terminal_observation": self._get_obs()}
         
-        # Check if stuck (no more valid moves)
-        if not self._has_valid_moves():
-            return self._get_obs(), -5, False, True, {}
-        
-        return self._get_obs(), 10, False, False, {}
+        return self._get_obs(), 20, False, False, {}
 
     def visualize(self):
        fig, ax = plt.subplots(figsize=(6,6))
@@ -211,8 +202,26 @@ class APADEnv(gym.Env):
         for row in self.grid:
             print(''.join(['O' if x==0 else 'X' if x==-1 else str(x) for x in row]))
 
+    def decode_action(self, action):
+        piece_id = action // (2 * 4 * 43)
+        remaining = action % (2 * 4 * 43)
+        chirality = remaining // (4 * 43)
+        remaining = remaining % (4 * 43)
+        rotation = remaining // 43
+        position = remaining % 43
+        
+        row, col = divmod(position, 7)
+        
+        return {
+           'piece_id': piece_id,
+           'chirality': chirality, 
+           'rotation': rotation,
+           'position': position,
+           'grid_pos': (row, col)
+        }
+    
     def decode_action_verbose(self, action):
-        move = decode_action(action)
+        move = self.decode_action(action)
         move['piece_name'] = self.piece_names[move['piece_id']]
         return move
     
@@ -241,3 +250,22 @@ class APADEnv(gym.Env):
         ax.set_yticks([])
         ax.set_title(f"Piece {move['piece_name']} (C:{move['chirality']}, R:{move['rotation']})")
         plt.show()
+
+    """
+    def action_masks(self):
+        mask = np.zeros(self.action_space.n, dtype=bool)
+        
+        for action in range(self.action_space.n):
+            move = self.decode_action(action)
+            piece_id = move['piece_id']
+            
+            # Check if piece is available
+            if not self.remaining_pieces[piece_id]:
+                continue
+                
+            # Check if placement is valid
+            if self._is_valid_placement(piece_id, move['chirality'], move['rotation'], move['position']):
+                mask[action] = True
+        
+        return mask
+    """

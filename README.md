@@ -32,7 +32,11 @@ Each piece has a bool chirality state and 4 rotation states
 
 ## RL Strategy
 
-Getting started, completely random moves are selected, passed to the `step` function and then checked for validity. Unsurprisingly I'm swamped by invalid moves. This will certainly hamper learning. Action-masking is a needed near-term improvement. 
+Getting started, completely random moves are selected, passed to the `step`
+function and then checked for validity. Unsurprisingly I'm swamped by invalid
+moves. This will certainly hamper learning. I tweaked rewards briefly but
+couldn't overcome the vast number of invalid moves. Action-masking will
+hopefully solve this.
 
 Training is done in [apad_DQN_train.ipynb](apad_DQN_train.ipynb).
 
@@ -56,5 +60,5 @@ with 50,000 timesteps, we still can't win 1% of games. I suspect that action-mas
 - The way the game is intended to be played is to choose a date and construct a solution around it. The environment is not currently structured this way.
 - Reviewing the goal of this project: you enter the date, the model finds a (all) solution(s).
 - The environment is currently organized to solve a simpler problem: find *any* solution, whether or not it's a valid date.
-- A revised reward system could immediately solve everything. Reward it highly for not leaving contiguous groups of <=4 cells (which immediately invalidate the game).
-- As-is, the reward model misguided: winning the game shouldn't be so valuable. Placing a first piece shouldn't be valuable.
+- After bricking the game when 2-4 empty-cell islands are created, episode length is down and success rates are higher, but haven't surmounted the wave of invalid moves and the negative rewards that should accompany them.
+- Reward scheme will still likely need tweaking, but next step is to implement action masking.
