@@ -61,4 +61,8 @@ with 50,000 timesteps, we still can't win 1% of games. I suspect that action-mas
 - Reviewing the goal of this project: you enter the date, the model finds a (all) solution(s).
 - The environment is currently organized to solve a simpler problem: find *any* solution, whether or not it's a valid date.
 - After bricking the game when 2-4 empty-cell islands are created, episode length is down and success rates are higher, but haven't surmounted the wave of invalid moves and the negative rewards that should accompany them.
-- Reward scheme will still likely need tweaking, but next step is to implement action masking.
+- Action-masking is in place. Training improving steadily but failing around
+  150k due to simplex error -- not normalizing action probabilities to 1. Fixes
+are apparently to train more slowly and increase entropy coefficient penalizing
+overconfidence (maybe).
+- In the meantime, rewards are at 110/190 and still climbing.
