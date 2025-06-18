@@ -1,7 +1,9 @@
 import gymnasium as gym
 import numpy as np
 import matplotlib.pyplot as plt
+
 from scipy.ndimage import label
+from collections import deque
 
 PIECES = {
     "K": [(0, 0), (1, 0), (2, 0), (3, 0), (2, 1)],  # __|_ knee           0-343
@@ -17,8 +19,41 @@ PIECES = {
 
 def has_islands(grid):
     labeled_array, num_features = label(grid == 0)
+    if num_features == 0:
+        return False
     island_sizes = np.bincount(labeled_array.ravel())[1:]
     return np.any((island_sizes >= 2) & (island_sizes <= 4))
+
+
+# this method was hopefully a speedup vs the above, but it doesn't have a significant impact. Maybe + 0.1 games/sec.
+"""
+def has_islands(grid):
+    h, w = grid.shape
+    visited = np.zeros_like(grid, dtype=bool)
+    nbrs = ((1, 0), (-1, 0), (0, 1), (0, -1))  # cardinal directions
+
+    for y in range(h):
+        for x in range(w):
+            # start a flood fill only on unseen 0-cells
+            if grid[y, x] == 0 and not visited[y, x]:
+                q = deque([(y, x)])
+                visited[y, x] = True
+                size = 0
+
+                while q:
+                    cy, cx = q.pop()
+                    size += 1
+                    for dy, dx in nbrs:
+                        ny, nx = cy + dy, cx + dx
+                        if 0 <= ny < h and 0 <= nx < w:
+                            if grid[ny, nx] == 0 and not visited[ny, nx]:
+                                visited[ny, nx] = True
+                                q.append((ny, nx))
+
+                if 2 <= size <= 4:
+                    return True
+    return False
+"""
 
 
 class APADEnv(gym.Env):
@@ -142,7 +177,7 @@ class APADEnv(gym.Env):
             if np.sum(self.remaining_pieces) == 0:  # win
                 reward, terminated, truncated = +5, True, False
             elif has_islands(self.grid):  # lose
-                reward, terminated, truncated = -5, True, False
+                reward, terminated, truncated = -5, False, True
             else:  # normal step
                 reward, terminated, truncated = +1, False, False
 
