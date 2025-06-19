@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 
 from scipy.ndimage import label
 from collections import deque
+from random import randint
 
 PIECES = {
     "K": [(0, 0), (1, 0), (2, 0), (3, 0), (2, 1)],  # __|_ knee           0-343
@@ -26,14 +27,18 @@ def has_islands(grid):
         return False
     island_sizes = np.bincount(labeled_array.ravel())[1:]
 
-    has_bad_islands = np.any(np.isin(island_sizes, [3, 4, 9, 14]))
+    has_bad_islands = np.any(np.isin(island_sizes, [2, 3, 4, 7, 8, 9, 12, 13, 14]))
 
+    return has_bad_islands
+
+    """
     singles = island_sizes == 1  # numpy version of [x == 1 for x in island_sizes]
     has_too_many_singles = singles.sum() >= 3
 
     has_single_and_double = (island_sizes == 2).any() and singles.any()
 
     return has_bad_islands or has_too_many_singles or has_single_and_double
+    """
 
 
 # this method was hopefully a speedup vs the above, but it doesn't have a significant impact. Maybe + 0.1 games/sec.
@@ -67,8 +72,11 @@ def has_islands(grid):
 """
 
 
+# None -> random date (randomize on reset)
+# <0 -> do not use any date (don't randomize on reset)
+# other -> selected date (don't randomize on reset)
 class APADEnv(gym.Env):
-    def __init__(self):
+    def __init__(self, mon=None, day=None):
         super().__init__()
 
         self.piece_names = ["K", "A", "C", "L", "R", "P", "I", "Z"]
@@ -90,6 +98,31 @@ class APADEnv(gym.Env):
         for pos in self.invalid_positions:
             self.grid[pos] = -1
 
+        # mark solution date:
+        self.mon = mon
+        self.day = day
+        # mon = random.randint(1, 12)
+        # day = random.randint(1, 31)
+        valid_positions = [
+            (r, c)
+            for r in range(7)
+            for c in range(7)
+            if (r, c) not in self.invalid_positions
+        ]
+        if self.mon is None:
+            self.grid[valid_positions[randint(1, 12) - 1]] = -1
+        elif 1 <= self.mon <= 31:
+            self.grid[valid_positions[self.mon - 1]] = -1
+        else:
+            pass
+
+        if self.day is None:
+            self.grid[valid_positions[11 + randint(1, 31)]] = -1
+        elif 1 <= self.day <= 31:
+            self.grid[valid_positions[11 + self.day]] = -1
+        else:
+            pass
+
         self.remaining_pieces = np.ones(8, dtype=bool)
         self._cached_action_masks = None
 
@@ -104,6 +137,25 @@ class APADEnv(gym.Env):
         self.grid = np.zeros((self.grid_size, self.grid_size), dtype=np.int8)
         for pos in self.invalid_positions:
             self.grid[pos] = -1
+        valid_positions = [
+            (r, c)
+            for r in range(7)
+            for c in range(7)
+            if (r, c) not in self.invalid_positions
+        ]
+        if self.mon is None:
+            self.grid[valid_positions[randint(1, 12) - 1]] = -1
+        elif 1 <= self.mon <= 31:
+            self.grid[valid_positions[self.mon - 1]] = -1
+        else:
+            pass
+
+        if self.day is None:
+            self.grid[valid_positions[11 + randint(1, 31)]] = -1
+        elif 1 <= self.day <= 31:
+            self.grid[valid_positions[11 + self.day]] = -1
+        else:
+            pass
 
         self.remaining_pieces = np.ones(8, dtype=bool)
         self._cached_action_masks = None
