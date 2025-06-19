@@ -17,12 +17,23 @@ PIECES = {
 }
 
 
+# islands of 3, 4, 9, and 14 brick the game.
+# 3 or more single islands brick the game.
+# a single and a double island brick the game.
 def has_islands(grid):
     labeled_array, num_features = label(grid == 0)
     if num_features == 0:
         return False
     island_sizes = np.bincount(labeled_array.ravel())[1:]
-    return np.any((island_sizes >= 2) & (island_sizes <= 4))
+
+    has_bad_islands = np.any(np.isin(island_sizes, [3, 4, 9, 14]))
+
+    singles = island_sizes == 1  # numpy version of [x == 1 for x in island_sizes]
+    has_too_many_singles = singles.sum() >= 3
+
+    has_single_and_double = (island_sizes == 2).any() and singles.any()
+
+    return has_bad_islands or has_too_many_singles or has_single_and_double
 
 
 # this method was hopefully a speedup vs the above, but it doesn't have a significant impact. Maybe + 0.1 games/sec.
@@ -157,7 +168,7 @@ class APADEnv(gym.Env):
             self.grid[row + dr, col + dc] = piece_id + 1
 
         self.remaining_pieces[piece_id] = False
-        self._cached_action_masks = None  # Invalidate cache
+        # self._cached_action_masks = None  # Invalidate cache
         return True
 
     def _place_piece(self, action):
@@ -167,27 +178,33 @@ class APADEnv(gym.Env):
         )
 
     def step(self, action):
-        obs = self._get_obs()
         info = {}
 
-        # This path should never occur with action masking active
+        # This path should never occur with action masking active, but check_env likes us to not throw errors
         if not self._place_piece(action):
-            reward, terminated, truncated = -1, False, False
-        else:
-            if np.sum(self.remaining_pieces) == 0:  # win
-                reward, terminated, truncated = +5, True, False
-            elif has_islands(self.grid):  # lose
-                reward, terminated, truncated = -5, False, True
-            else:  # normal step
-                reward, terminated, truncated = +1, False, False
+            reward, terminated, truncated = -20, False, True
+            return self._get_obs(), -20, False, True, info
 
-            if terminated:
-                info["terminal_observation"] = obs
+        # Cache masks after state change
+        self._cached_action_masks = None
+        self._cached_action_masks = self.action_masks()
 
-        info["action_mask"] = self.action_masks()
+        # else:
+        if np.sum(self.remaining_pieces) == 0:  # win - check before has islands!
+            reward, terminated, truncated = +30, True, False
+        elif has_islands(self.grid) or not np.any(self._cached_action_masks):  # lose
+            reward, terminated, truncated = -20, False, True
+        else:  # normal step
+            reward, terminated, truncated = +10, False, False
+
+        obs = self._get_obs()
+        if terminated:
+            info["terminal_observation"] = obs
+        info["action_mask"] = self._cached_action_masks
 
         return obs, reward, terminated, truncated, info
 
+    # Important to refresh the mask /during/ the step(), but also called by sb3 inbetween step()s, for which we don't need to recalculate.
     def action_masks(self):
         if self._cached_action_masks is not None:
             return self._cached_action_masks
@@ -203,7 +220,8 @@ class APADEnv(gym.Env):
         for piece_id in available_pieces:
             for chirality in range(2):
                 for rotation in range(4):
-                    for position in valid_positions:
+                    for position in range(43):
+                        # for position in valid_positions:
                         if self._is_valid_placement(
                             piece_id, chirality, rotation, position
                         ):
