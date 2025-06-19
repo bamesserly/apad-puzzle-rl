@@ -182,7 +182,6 @@ class APADEnv(gym.Env):
 
         # This path should never occur with action masking active, but check_env likes us to not throw errors
         if not self._place_piece(action):
-            reward, terminated, truncated = -20, False, True
             return self._get_obs(), -20, False, True, info
 
         # Cache masks after state change
@@ -190,17 +189,18 @@ class APADEnv(gym.Env):
         self._cached_action_masks = self.action_masks()
 
         # else:
-        if np.sum(self.remaining_pieces) == 0:  # win - check before has islands!
-            reward, terminated, truncated = +30, True, False
+        if np.sum(self.remaining_pieces) == 0:  # win - check this before has islands!
+            reward, terminated, truncated = +3, True, False
         elif has_islands(self.grid) or not np.any(self._cached_action_masks):  # lose
-            reward, terminated, truncated = -20, False, True
+            reward, terminated, truncated = -1, False, True
         else:  # normal step
-            reward, terminated, truncated = +10, False, False
+            reward, terminated, truncated = +1, False, False
+
+        info["action_mask"] = self._cached_action_masks
 
         obs = self._get_obs()
         if terminated:
             info["terminal_observation"] = obs
-        info["action_mask"] = self._cached_action_masks
 
         return obs, reward, terminated, truncated, info
 
