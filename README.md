@@ -32,37 +32,28 @@ Each piece has a bool chirality state and 4 rotation states
 
 ## RL Strategy
 
-Getting started, completely random moves are selected, passed to the `step`
-function and then checked for validity. Unsurprisingly I'm swamped by invalid
-moves. This will certainly hamper learning. I tweaked rewards briefly but
-couldn't overcome the vast number of invalid moves. Action-masking will
-hopefully solve this.
+Place random moves, mask invalid moves from the action space, and train with Masked PPO.
 
-Training is done in [apad_DQN_train.ipynb](apad_DQN_train.ipynb).
+Training is done in [apad_MPPO_train.ipynb](apad_MPPO_train.ipynb).
 
 ```
-model = DQN(
-    "MlpPolicy", 
-    env, 
-    exploration_initial_eps=1.0,    # Start with 100% random
-    exploration_final_eps=0.1,      # End with 10% random  
-    exploration_fraction=0.5,       # Take half of training to decay
-    learning_rate=1e-3,             # Slightly higher learning rate
-    verbose=1
+model = MaskablePPO(
+    "MlpPolicy",
+    env,
+    n_steps = 128,
+    tensorboard_log="./maskable_logs/",
+    verbose=1,
 )
 ```
 
-with 50,000 timesteps, we still can't win 1% of games. I suspect that action-masking will be the most important improvement.
+Rewards: win +3, valid move +1, lose/brick game -2.
 
 ## Notes
 
-- At the moment, a success/win means placing all the pieces on the board, which may not be a valid date. That's another constraint to be placed.
-- The way the game is intended to be played is to choose a date and construct a solution around it. The environment is not currently structured this way.
-- Reviewing the goal of this project: you enter the date, the model finds a (all) solution(s).
-- The environment is currently organized to solve a simpler problem: find *any* solution, whether or not it's a valid date.
-- After bricking the game when 2-4 empty-cell islands are created, episode length is down and success rates are higher, but haven't surmounted the wave of invalid moves and the negative rewards that should accompany them.
-- Action-masking is in place. Training improving steadily but failing around
-  150k due to simplex error -- not normalizing action probabilities to 1. Fixes
-are apparently to train more slowly and increase entropy coefficient penalizing
-overconfidence (maybe).
-- In the meantime, rewards are at 110/190 and still climbing.
+Highlights of the development history:
+- Env originally considered *any* two open cells a win.
+- A few key improvements enabled a solved model: (1) PPO -> MaskedPPO filtering invalid moves, (2) early exit when the game is bricked (`has-islands()`).
+- Apparently a bug in PPO for envs with large action spaces leads to policy probility sum not being normalized, called a Simplex constraint violation. Turning off all validations leads to solving the env in ~15k steps. Fixing just the bug in torch leads to solving the env in 20k steps about 50% of the time, and getting stuck at 7/8 pieces placed the other 50% of the time.
+- While this may bite me later, rather than track fix this unreliable training, I'm moving on to solve the original problem with a given date.
+
+Currently modifying the environment to require a specific date solution.
