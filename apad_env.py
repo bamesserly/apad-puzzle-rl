@@ -21,6 +21,9 @@ PIECES = {
 # islands of 3, 4, 9, and 14 brick the game.
 # 3 or more single islands brick the game.
 # a single and a double island brick the game.
+
+
+# todo: check that islands of 6 are rectangles
 def has_islands(grid):
     labeled_array, num_features = label(grid == 0)
     if num_features == 0:
@@ -29,20 +32,17 @@ def has_islands(grid):
 
     has_bad_islands = np.any(np.isin(island_sizes, [2, 3, 4, 7, 8, 9, 12, 13, 14]))
 
-    return has_bad_islands
-
-    """
     singles = island_sizes == 1  # numpy version of [x == 1 for x in island_sizes]
+
     has_too_many_singles = singles.sum() >= 3
 
     has_single_and_double = (island_sizes == 2).any() and singles.any()
 
     return has_bad_islands or has_too_many_singles or has_single_and_double
-    """
 
 
-# this method was hopefully a speedup vs the above, but it doesn't have a significant impact. Maybe + 0.1 games/sec.
 """
+# this method was hopefully a speedup vs the above, but it doesn't have a significant impact. Maybe + 0.1 games/sec.
 def has_islands(grid):
     h, w = grid.shape
     visited = np.zeros_like(grid, dtype=bool)
@@ -79,12 +79,14 @@ class APADEnv(gym.Env):
     def __init__(self, mon=None, day=None):
         super().__init__()
 
+        # piece_id is the index of this array
         self.piece_names = ["K", "A", "C", "L", "R", "P", "I", "Z"]
         self.grid_size = 7
         self.valid_spaces = 43
         self.invalid_positions = {(0, 6), (1, 6), (6, 3), (6, 4), (6, 5), (6, 6)}
 
         # 8 pieces × 2 chirality × 4 rotations × 43 positions = 2752
+        # In reality, the number is about half of this, accounting for pieces hitting the walls and chiral/rotation symettries.
         self.action_space = gym.spaces.Discrete(8 * 2 * 4 * 43)
 
         # Observation: 7x7 grid + 8 remaining pieces
@@ -159,9 +161,26 @@ class APADEnv(gym.Env):
 
         self.remaining_pieces = np.ones(8, dtype=bool)
         self._cached_action_masks = None
-
-        info = {"action_mask": self.action_masks()}
+        mask = self.action_masks()
+        info = {"action_mask": mask}
         return self._get_obs(), info
+
+    def set_date(self, mon, day):
+        self.mon = mon
+        self.day = day
+        self.reset()
+
+    def set_difficulty(self, level):
+        if level == 0:
+            self.set_date(-1, -1)
+        elif level == 1:
+            self.set_date(-1, None)
+        elif level == 2:
+            self.set_date(None, None)
+        else:
+            raise
+        self.reset()
+        return True
 
     def _get_piece_coords(self, piece_id, chirality, rotation):
         base_coords = PIECES[self.piece_names[piece_id]]
@@ -240,19 +259,32 @@ class APADEnv(gym.Env):
         self._cached_action_masks = None
         self._cached_action_masks = self.action_masks()
 
-        # else:
-        if np.sum(self.remaining_pieces) == 0:  # win - check this before has islands!
-            reward, terminated, truncated = +3, True, False
+        n_remaining_pieces = np.sum(self.remaining_pieces)
+
+        if n_remaining_pieces == 0:  # win - check this before has islands!
+            reward, terminated, truncated = +1, True, False
         elif has_islands(self.grid) or not np.any(self._cached_action_masks):  # lose
-            reward, terminated, truncated = -1, False, True
+            # small penalty for losing in the first turn or 2
+            # reward = 0 if n_remaining_pieces > 5 else -1. * n_remaining_pieces / 16.
+            reward, terminated, truncated = 0, False, True
         else:  # normal step
-            reward, terminated, truncated = +1, False, False
+            reward = (
+                0.5 if n_remaining_pieces > 3 else 0
+            )  # (8 - n_remaining_pieces) / 8. if n_remaining_pieces > 3 else 0 # small, per-piece reward for early/mid game
+            terminated, truncated = False, False
 
         info["action_mask"] = self._cached_action_masks
 
         obs = self._get_obs()
         if terminated:
             info["terminal_observation"] = obs
+
+        if terminated or truncated:
+            info["episode"] = {
+                # "r": self.episode_reward,
+                "l": 8
+                - n_remaining_pieces
+            }
 
         return obs, reward, terminated, truncated, info
 
@@ -261,18 +293,29 @@ class APADEnv(gym.Env):
         if self._cached_action_masks is not None:
             return self._cached_action_masks
 
+        # zeroes mean every action is invalid
         mask = np.zeros(self.action_space.n, dtype=bool)
+        # print(f'initial # of valid actions {np.flatnonzero(mask).size}')
 
         # Only check positions that are empty
         valid_positions = np.where((self.grid == 0).flatten())[0]
+        # print(f'initial # of unoccupied cells {len(valid_positions)}')
 
         # Only check available pieces
         available_pieces = np.where(self.remaining_pieces)[0]
+        # print(f'initial # of available pieces {len(available_pieces)}')
+
+        total = 0
 
         for piece_id in available_pieces:
             for chirality in range(2):
+                if self.piece_names[piece_id] == "R" and chirality == 1:
+                    continue
                 for rotation in range(4):
+                    if self.piece_names[piece_id] in ["R", "Z", "C"] and rotation >= 2:
+                        continue
                     for position in range(43):
+                        total += 1
                         # for position in valid_positions:
                         if self._is_valid_placement(
                             piece_id, chirality, rotation, position
@@ -281,6 +324,8 @@ class APADEnv(gym.Env):
                                 piece_id, chirality, rotation, position
                             )
                             mask[action] = True
+        # print(f'final # of valid actions {np.flatnonzero(mask).size}')
+        # print(f'total # of actions {total}')
 
         self._cached_action_masks = mask
         return mask

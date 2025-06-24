@@ -57,3 +57,15 @@ Highlights of the development history:
 - While this may bite me later, rather than track fix this unreliable training, I'm moving on to solve the original problem with a given date.
 
 Currently modifying the environment to require a specific date solution.
+
+### Environment
+
+ conda create --name rl_2025 python=3.10
+ conda activate rl_2025
+ conda install pytorch torchvision torchaudio -c pytorch
+ pip install stable-baselines3[extra]
+ conda install swig
+ pip install gymnasium[all]
+ pip install tensorboard
+ pip install jupyter
+ pip install sb3-contrib
