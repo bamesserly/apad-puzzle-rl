@@ -54,9 +54,9 @@ Highlights of the development history:
 - Env originally considered *any* two open cells a win.
 - A few key improvements enabled a solved model: (1) PPO -> MaskedPPO filtering invalid moves, (2) early exit when the game is bricked (`has-islands()`).
 - Apparently a bug in PPO for envs with large action spaces leads to policy probility sum not being normalized, called a Simplex constraint violation. Turning off all validations leads to solving the env in ~15k steps. Fixing just the bug in torch leads to solving the env in 20k steps about 50% of the time, and getting stuck at 7/8 pieces placed the other 50% of the time.
-- While this may bite me later, rather than track fix this unreliable training, I'm moving on to solve the original problem with a given date.
-
-Currently modifying the environment to require a specific date solution.
+- Env now accepts a month and or day or neither to constrain solutions.
+- Not able to reproduce, even with no constraint, our quick success and training before these modifications. Gotta revert to see if I can understand the issue.
+- Nowadays, we're at 0.01% success rate in 21 hours and 475,000 random episodes. Felt like it was higher in prev commits.
 
 ### Environment
 
