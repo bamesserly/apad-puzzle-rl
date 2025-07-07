@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import label
 from collections import deque
 from random import randint
+from time import sleep
 
 PIECES = {
     "K": [(0, 0), (1, 0), (2, 0), (3, 0), (2, 1)],  # __|_ knee           0-343
@@ -30,7 +31,7 @@ def has_islands(grid):
         return False
     island_sizes = np.bincount(labeled_array.ravel())[1:]
 
-    has_bad_islands = np.any(np.isin(island_sizes, [2, 3, 4, 7, 8, 9, 12, 13, 14]))
+    has_bad_islands = np.any(np.isin(island_sizes, [1, 2, 3, 4, 7, 8, 9, 12, 13, 14]))
 
     singles = island_sizes == 1  # numpy version of [x == 1 for x in island_sizes]
 
@@ -76,7 +77,7 @@ def has_islands(grid):
 # <0 -> do not use any date (don't randomize on reset)
 # other -> selected date (don't randomize on reset)
 class APADEnv(gym.Env):
-    def __init__(self, mon=None, day=None):
+    def __init__(self, mon=None, day=None, handicap=0):
         super().__init__()
 
         # piece_id is the index of this array
@@ -84,6 +85,7 @@ class APADEnv(gym.Env):
         self.grid_size = 7
         self.valid_spaces = 43
         self.invalid_positions = {(0, 6), (1, 6), (6, 3), (6, 4), (6, 5), (6, 6)}
+        self.handicap = handicap
 
         # 8 pieces × 2 chirality × 4 rotations × 43 positions = 2752
         # In reality, the number is about half of this, accounting for pieces hitting the walls and chiral/rotation symettries.
@@ -253,6 +255,7 @@ class APADEnv(gym.Env):
 
         # This path should never occur with action masking active, but check_env likes us to not throw errors
         if not self._place_piece(action):
+            print("ERROR")
             return self._get_obs(), -20, False, True, info
 
         # Cache masks after state change
@@ -261,17 +264,18 @@ class APADEnv(gym.Env):
 
         n_remaining_pieces = np.sum(self.remaining_pieces)
 
-        if n_remaining_pieces == 0:  # win - check this before has islands!
+        if n_remaining_pieces == self.handicap:  # win
             reward, terminated, truncated = +1, True, False
-        elif has_islands(self.grid) or not np.any(self._cached_action_masks):  # lose
-            # small penalty for losing in the first turn or 2
-            # reward = 0 if n_remaining_pieces > 5 else -1. * n_remaining_pieces / 16.
+        elif not np.any(self._cached_action_masks):  # lose
             reward, terminated, truncated = 0, False, True
-        else:  # normal step
-            reward = (
-                0.5 if n_remaining_pieces > 3 else 0
-            )  # (8 - n_remaining_pieces) / 8. if n_remaining_pieces > 3 else 0 # small, per-piece reward for early/mid game
-            terminated, truncated = False, False
+        elif has_islands(self.grid):  # bad move! lose eventually
+            reward = -0.05 if n_remaining_pieces > 4 else 0
+            terminated, truncated = False, True
+        else:  # good move
+            # reward = (
+            #    0.5 if n_remaining_pieces > 3 else 0
+            # )  # (8 - n_remaining_pieces) / 8. if n_remaining_pieces > 3 else 0 # small, per-piece reward for early/mid game
+            reward, terminated, truncated = 0, False, False
 
         info["action_mask"] = self._cached_action_masks
 
