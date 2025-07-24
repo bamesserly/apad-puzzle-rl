@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import label
 from collections import deque
 from random import randint
-from time import sleep
 
 PIECES = {
     "K": [(0, 0), (1, 0), (2, 0), (3, 0), (2, 1)],  # __|_ knee           0-343
@@ -86,6 +85,7 @@ class APADEnv(gym.Env):
         self.valid_spaces = 43
         self.invalid_positions = {(0, 6), (1, 6), (6, 3), (6, 4), (6, 5), (6, 6)}
         self.handicap = handicap
+        self.episode_reward = 0
 
         # 8 pieces × 2 chirality × 4 rotations × 43 positions = 2752
         # In reality, the number is about half of this, accounting for pieces hitting the walls and chiral/rotation symettries.
@@ -137,6 +137,8 @@ class APADEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
+
+        self.episode_reward = 0
 
         self.grid = np.zeros((self.grid_size, self.grid_size), dtype=np.int8)
         for pos in self.invalid_positions:
@@ -269,13 +271,13 @@ class APADEnv(gym.Env):
         elif not np.any(self._cached_action_masks):  # lose
             reward, terminated, truncated = 0, False, True
         elif has_islands(self.grid):  # bad move! lose eventually
-            reward = -0.05 if n_remaining_pieces > 4 else 0
+            reward = -0.1 if n_remaining_pieces > 4 else 0
             terminated, truncated = False, True
         else:  # good move
             # reward = (
             #    0.5 if n_remaining_pieces > 3 else 0
             # )  # (8 - n_remaining_pieces) / 8. if n_remaining_pieces > 3 else 0 # small, per-piece reward for early/mid game
-            reward, terminated, truncated = 0, False, False
+            reward, terminated, truncated = 0.01, False, False
 
         info["action_mask"] = self._cached_action_masks
 
@@ -283,12 +285,11 @@ class APADEnv(gym.Env):
         if terminated:
             info["terminal_observation"] = obs
 
+        self.episode_reward += reward
+
         if terminated or truncated:
-            info["episode"] = {
-                # "r": self.episode_reward,
-                "l": 8
-                - n_remaining_pieces
-            }
+            info["r"] = self.episode_reward
+            info["l"] = 8 - n_remaining_pieces
 
         return obs, reward, terminated, truncated, info
 
