@@ -14,7 +14,7 @@ This is an [exact cover](https://en.wikipedia.org/wiki/Exact_cover) problem, clo
 
 Let's see what we can do with RL.
 
-I'll use deep Q learning via sb3 with a custom gymnasium environment
+I'll use ~~deep Q learning~~ masked PPO via sb3 with a custom gymnasium environment
 
 ## Environment
 
@@ -40,26 +40,24 @@ Training is done in [apad_MPPO_train.ipynb](apad_MPPO_train.ipynb).
 model = MaskablePPO(
     "MlpPolicy",
     env,
-    n_steps = 128,
-    tensorboard_log="./maskable_logs/",
-    verbose=1,
 )
 ```
 
-Rewards: win +3, valid move +1, lose/brick game -2.
+Rewards: experimenting with rewards. Currently using pseudo-sparce. +1 win, -.1 for losing early, +0.01 for valid piece placement.
 
 ## Notes
 
 Highlights of the development history:
-- Env originally considered *any* two open cells a win.
-- A few key improvements enabled a solved model: (1) PPO -> MaskedPPO filtering invalid moves, (2) early exit when the game is bricked (`has-islands()`).
-- Apparently a bug in PPO for envs with large action spaces leads to policy probility sum not being normalized, called a Simplex constraint violation. Turning off all validations leads to solving the env in ~15k steps. Fixing just the bug in torch leads to solving the env in 20k steps about 50% of the time, and getting stuck at 7/8 pieces placed the other 50% of the time.
+- Earliest attempts did not specify a date constraint---any two open cells were considered a win. Didn't spend too long in this mode, but were consistently getting 7/8 or maybe 8/8. I think model would stumble on a solution, get massively rewarded for it, and not learn anything new. Rather than fix this, just moved on to the real environment, where a date is specificied.
+    - Back in the no-date-constraint days, a bug in PPO for envs with large action spaces leads to policy probility sum not being normalized, called a Simplex constraint violation. Turning off all validations leads to solving the env in ~15k steps. Fixing just the bug in torch leads to solving the env in 20k steps about 50% of the time, and getting stuck at 7/8 pieces placed the other 50% of the time.
+- Quickly moved away from DQN to PPO. Was having no luck.
+- Exiting early when the game is bricked (`has_islands()`) was huge. It's the only human "exploit" I know of.
+- Moving from PPO to Masked PPO was another big step. Was spending a lot of time on invalid moves and meant I had to worry about the reward structure for invalid moves.
 - Env now accepts a month and or day or neither to constrain solutions.
-- Not able to reproduce, even with no constraint, our quick success and training before these modifications. Gotta revert to see if I can understand the issue.
-- Nowadays, we're at 0.01% success rate in 21 hours and 475,000 random episodes. Felt like it was higher in prev commits.
 
 ### Environment
 
+```
  conda create --name rl_2025 python=3.10
  conda activate rl_2025
  conda install pytorch torchvision torchaudio -c pytorch
@@ -69,3 +67,4 @@ Highlights of the development history:
  pip install tensorboard
  pip install jupyter
  pip install sb3-contrib
+```
