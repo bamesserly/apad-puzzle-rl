@@ -4,7 +4,7 @@
 
 [Here's the puzzle](https://www.dragonfjord.com/product/a-puzzle-a-day/).
 
-<img src="puzzle.jpg" alt="My puzzle, ready for an April 14th solution" width="400"/>
+<img src="imgs/puzzle.jpg" alt="My puzzle, ready for an April 14th solution" width="400"/>
 
 The idea is to arrange the irregular group of pentominos on the grid to reveal only the current month and date.
 
@@ -24,11 +24,11 @@ Environment is defined here: [apad_env.py](apad_env.py).
 
 Sample board state
 
-<img src="board_state.png" alt="" width="400"/>
+<img src="imgs/board_state.png" alt="" width="400"/>
 
 Each piece has a bool chirality state and 4 rotation states
 
-<img src="single_piece.png" alt="" width="200"/>
+<img src="imgs/single_piece.png" alt="" width="200"/>
 
 ## RL Strategy
 
