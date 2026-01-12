@@ -55,16 +55,74 @@ Highlights of the development history:
 - Moving from PPO to Masked PPO was another big step. Was spending a lot of time on invalid moves and meant I had to worry about the reward structure for invalid moves.
 - Env now accepts a month and or day or neither to constrain solutions.
 
+## Setup
+
 ### Environment
 
+Create the conda environment from `environment.yml`:
+
+```bash
+conda env create -f environment.yml
+conda activate rl
 ```
- conda create --name rl_2025 python=3.10
- conda activate rl_2025
- conda install pytorch torchvision torchaudio -c pytorch
- pip install stable-baselines3[extra]
- conda install swig
- pip install gymnasium[all]
- pip install tensorboard
- pip install jupyter
- pip install sb3-contrib
+
+Or manually:
+
+```bash
+conda create --name rl python=3.10
+conda activate rl
+conda install pytorch torchvision torchaudio -c pytorch
+conda install swig
+pip install stable-baselines3 sb3-contrib gymnasium[all] tensorboard jupyter matplotlib scipy numpy pandas
 ```
+
+### Install Package
+
+Install the project in editable mode for clean imports:
+
+```bash
+pip install -e .
+```
+
+### Pre-commit Hooks
+
+Set up pre-commit hooks for automatic code quality checks:
+
+```bash
+pre-commit install
+```
+
+This will run on every commit:
+- **ruff** - Fast linting and formatting (Python files)
+- **nbqa + ruff** - Linting for notebooks
+- **pytest** - Run test suite (excluding slow tests)
+
+To run manually on all files:
+```bash
+pre-commit run --all-files
+```
+
+To skip hooks for a specific commit:
+```bash
+git commit --no-verify
+```
+
+## Testing
+
+Run the test suite:
+
+```bash
+pytest                    # Run all tests
+pytest -v                 # Verbose output
+pytest -m "not slow"      # Skip slow tests
+pytest test_apad_env.py::TestBasicEnvironment  # Run specific test class
+```
+
+The test suite (`test_apad_env.py`) validates:
+- Environment initialization and grid structure
+- Piece placement, rotation, and chirality
+- Overlap detection and reset functionality
+- Date constraint handling
+- Island detection for unwinnable states
+- Action masking correctness
+- Full gameplay mechanics

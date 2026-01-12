@@ -1,10 +1,9 @@
-import gymnasium as gym
-import numpy as np
-import matplotlib.pyplot as plt
-
-from scipy.ndimage import label
-from collections import deque
 from random import randint
+
+import gymnasium as gym
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.ndimage import label
 
 PIECES = {
     "K": [(0, 0), (1, 0), (2, 0), (3, 0), (2, 1)],  # __|_ knee           0-343
@@ -108,10 +107,7 @@ class APADEnv(gym.Env):
         # mon = random.randint(1, 12)
         # day = random.randint(1, 31)
         valid_positions = [
-            (r, c)
-            for r in range(7)
-            for c in range(7)
-            if (r, c) not in self.invalid_positions
+            (r, c) for r in range(7) for c in range(7) if (r, c) not in self.invalid_positions
         ]
         if self.mon is None:
             self.grid[valid_positions[randint(1, 12) - 1]] = -1
@@ -131,9 +127,7 @@ class APADEnv(gym.Env):
         self._cached_action_masks = None
 
     def _get_obs(self):
-        return np.concatenate(
-            [self.grid.flatten(), self.remaining_pieces.astype(np.int8)]
-        )
+        return np.concatenate([self.grid.flatten(), self.remaining_pieces.astype(np.int8)])
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -144,10 +138,7 @@ class APADEnv(gym.Env):
         for pos in self.invalid_positions:
             self.grid[pos] = -1
         valid_positions = [
-            (r, c)
-            for r in range(7)
-            for c in range(7)
-            if (r, c) not in self.invalid_positions
+            (r, c) for r in range(7) for c in range(7) if (r, c) not in self.invalid_positions
         ]
         if self.mon is None:
             self.grid[valid_positions[randint(1, 12) - 1]] = -1
@@ -215,12 +206,7 @@ class APADEnv(gym.Env):
         cols = col + coords_array[:, 1]
 
         # Check bounds
-        if np.any(
-            (rows < 0)
-            | (rows >= self.grid_size)
-            | (cols < 0)
-            | (cols >= self.grid_size)
-        ):
+        if np.any((rows < 0) | (rows >= self.grid_size) | (cols < 0) | (cols >= self.grid_size)):
             return False
 
         # Check occupancy
@@ -303,7 +289,7 @@ class APADEnv(gym.Env):
         # print(f'initial # of valid actions {np.flatnonzero(mask).size}')
 
         # Only check positions that are empty
-        valid_positions = np.where((self.grid == 0).flatten())[0]
+        # valid_positions = np.where((self.grid == 0).flatten())[0]
         # print(f'initial # of unoccupied cells {len(valid_positions)}')
 
         # Only check available pieces
@@ -322,12 +308,8 @@ class APADEnv(gym.Env):
                     for position in range(43):
                         total += 1
                         # for position in valid_positions:
-                        if self._is_valid_placement(
-                            piece_id, chirality, rotation, position
-                        ):
-                            action = self.encode_action(
-                                piece_id, chirality, rotation, position
-                            )
+                        if self._is_valid_placement(piece_id, chirality, rotation, position):
+                            action = self.encode_action(piece_id, chirality, rotation, position)
                             mask[action] = True
         # print(f'final # of valid actions {np.flatnonzero(mask).size}')
         # print(f'total # of actions {total}')
@@ -428,9 +410,7 @@ class APADEnv(gym.Env):
 
     def visualize_piece(self, action):
         move = self.decode_action_verbose(action)
-        coords = self._get_piece_coords(
-            move["piece_id"], move["chirality"], move["rotation"]
-        )
+        coords = self._get_piece_coords(move["piece_id"], move["chirality"], move["rotation"])
 
         # Create 5x5 grid (should fit any piece)
         grid = np.zeros((5, 5))
@@ -451,7 +431,5 @@ class APADEnv(gym.Env):
 
         ax.set_xticks([])
         ax.set_yticks([])
-        ax.set_title(
-            f"Piece {move['piece_name']} (C:{move['chirality']}, R:{move['rotation']})"
-        )
+        ax.set_title(f"Piece {move['piece_name']} (C:{move['chirality']}, R:{move['rotation']})")
         plt.show()
