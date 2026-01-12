@@ -160,6 +160,25 @@ class APADEnv(gym.Env):
         info = {"action_mask": mask}
         return self._get_obs(), info
 
+    def save_state(self):
+        """
+        Return ONLY the mutable state that step() mutates.
+        Adjust field names to match your env.
+        """
+        return (
+            self.grid.copy(),
+            self.remaining_pieces,
+            self._cached_action_masks,
+            self.episode_reward,
+        )
+
+    def load_state(self, state):
+        grid, remaining_pieces, action_mask, episode_reward = state
+        self.grid = grid
+        self.remaining_pieces = remaining_pieces
+        self._cached_action_masks = action_mask
+        self.episode_reward = episode_reward
+
     def set_date(self, mon, day):
         self.mon = mon
         self.day = day
