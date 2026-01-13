@@ -116,8 +116,29 @@ Anyway, v1.2 is batch size 1000 with default n_steps, 2048, times our 8 agents -
 
 **Training Time** Seems like regardless of n_timesteps (which correlates to training time) we reach the same convergence. I assume this is due to the entropy coefficient schedule? We used to train really fast and I miss it. It's just so frustrating cutting a training off before it's definitely plateaued.
 
+# 2026-01-13
 
+Was away for a while. Fresh eyes. Doing some reading: RL not historically well-suited to this exact cover problem. No randomness, obviously solvable by an algorithm/tree search, relatively large action space, discrete. Sudoku, 2048, 15-square not readily solved by RL. Certainly not the poster-children for RL.
 
+Anyways, I'm still interested in solving this with RL, but gonna have to be more clever.
+
+For inspiration/morale-boost, implementing a backtrack tree-search.
+
+Misc ideas:
+
+- still like the idea of early, middle, late agents.
+- watching this backtracking tree search: could an RL or LLM agent watch the
+  tree search to learn and/or intervene at the right time?
+- Would graphical/visual networks/methods be better?
+- Another human strategy: if the z piece is already placed, and there's a
+  5-cell opening in the shape of the z piece, then you're done.
+- watching the backtrack search: I'm not sure, but I think I see boards that
+  look good vs not, e.g. if the search is exploring a depth-3 (or at least 4 or
+  5) board state, I have intuition for whether it could pan out or not.
+- What about groups of pieces? E.g. there are 7+6+...+1=28 two-piece combos,
+  each of which has...many possible ways of being combined. To ballpark:
+  Each piece has about 10-15 open faces. Each other piece could touch those
+  10-15 faces in about 10 ways. So 28x15x10=4500 two-piece combos.
 
 
 

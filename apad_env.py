@@ -1,3 +1,4 @@
+from functools import lru_cache
 from random import randint
 
 import gymnasium as gym
@@ -15,6 +16,37 @@ PIECES = {
     "I": [(0, 0), (0, 1), (1, 0), (2, 0), (3, 0)],  # |_ I                2063-2406
     "Z": [(0, 0), (0, 1), (1, 1), (2, 1), (2, 2)],  # Z                   2407-2751
 }
+
+
+@lru_cache(maxsize=128)
+def _compute_piece_coords(piece_name, chirality, rotation):
+    """Cached computation of piece coordinates after transformations.
+
+    Args:
+        piece_name: Name of piece (e.g., 'K', 'A', etc.)
+        chirality: 0 or 1 (flip x-coordinates if 1)
+        rotation: 0-3 (90-degree rotations)
+
+    Returns:
+        List of (x, y) tuples representing piece coordinates normalized to (0,0) anchor
+    """
+    base_coords = PIECES[piece_name]
+    coords = base_coords.copy()
+
+    # Apply chirality (flip x-coordinates)
+    if chirality == 1:
+        coords = [(-x, y) for x, y in coords]
+
+    # Apply rotation (0, 90, 180, 270 degrees)
+    for _ in range(rotation):
+        coords = [(-y, x) for x, y in coords]
+
+    # Normalize to ensure anchor at (0,0)
+    min_x = min(x for x, y in coords)
+    min_y = min(y for x, y in coords)
+    coords = [(x - min_x, y - min_y) for x, y in coords]
+
+    return coords
 
 
 # islands of 3, 4, 9, and 14 brick the game.
@@ -161,23 +193,21 @@ class APADEnv(gym.Env):
         return self._get_obs(), info
 
     def save_state(self):
-        """
-        Return ONLY the mutable state that step() mutates.
-        Adjust field names to match your env.
-        """
+        """Save minimal state for backtracking."""
         return (
             self.grid.copy(),
-            self.remaining_pieces,
-            self._cached_action_masks,
+            self.remaining_pieces.copy(),
             self.episode_reward,
+            self._cached_action_masks.copy() if self._cached_action_masks is not None else None,
         )
 
     def load_state(self, state):
-        grid, remaining_pieces, action_mask, episode_reward = state
+        """Restore state including cached action mask."""
+        grid, remaining_pieces, episode_reward, cached_mask = state
         self.grid = grid
         self.remaining_pieces = remaining_pieces
-        self._cached_action_masks = action_mask
         self.episode_reward = episode_reward
+        self._cached_action_masks = cached_mask
 
     def set_date(self, mon, day):
         self.mon = mon
@@ -197,39 +227,27 @@ class APADEnv(gym.Env):
         return True
 
     def _get_piece_coords(self, piece_id, chirality, rotation):
-        base_coords = PIECES[self.piece_names[piece_id]]
-        coords = base_coords.copy()
-
-        # Apply chirality (flip x-coordinates)
-        if chirality == 1:
-            coords = [(-x, y) for x, y in coords]
-
-        # Apply rotation (0, 90, 180, 270 degrees)
-        for _ in range(rotation):
-            coords = [(-y, x) for x, y in coords]
-
-        # Normalize to ensure anchor at (0,0)
-        min_x = min(x for x, y in coords)
-        min_y = min(y for x, y in coords)
-        coords = [(x - min_x, y - min_y) for x, y in coords]
-
-        return coords
+        """Get piece coordinates from cache."""
+        return _compute_piece_coords(self.piece_names[piece_id], chirality, rotation)
 
     def _is_valid_placement(self, piece_id, chirality, rotation, position):
+        """Check if piece placement is valid (in bounds and unoccupied).
+
+        Uses pure Python loop for speed - faster than numpy for small coordinate lists.
+        """
         coords = self._get_piece_coords(piece_id, chirality, rotation)
         row, col = divmod(position, self.grid_size)
 
-        # Vectorize coordinate checks
-        coords_array = np.array(coords)
-        rows = row + coords_array[:, 0]
-        cols = col + coords_array[:, 1]
-
-        # Check bounds
-        if np.any((rows < 0) | (rows >= self.grid_size) | (cols < 0) | (cols >= self.grid_size)):
-            return False
-
-        # Check occupancy
-        return np.all(self.grid[rows, cols] == 0)
+        # Fast path: check bounds and occupancy in pure Python
+        for dr, dc in coords:
+            r, c = row + dr, col + dc
+            # Bounds check
+            if r < 0 or r >= self.grid_size or c < 0 or c >= self.grid_size:
+                return False
+            # Occupancy check
+            if self.grid[r, c] != 0:
+                return False
+        return True
 
     def _place_piece_components(self, piece_id, chirality, rotation, position):
         # Return False if piece already used
@@ -303,35 +321,13 @@ class APADEnv(gym.Env):
         if self._cached_action_masks is not None:
             return self._cached_action_masks
 
-        # zeroes mean every action is invalid
         mask = np.zeros(self.action_space.n, dtype=bool)
-        # print(f'initial # of valid actions {np.flatnonzero(mask).size}')
-
-        # Only check positions that are empty
-        # valid_positions = np.where((self.grid == 0).flatten())[0]
-        # print(f'initial # of unoccupied cells {len(valid_positions)}')
-
-        # Only check available pieces
         available_pieces = np.where(self.remaining_pieces)[0]
-        # print(f'initial # of available pieces {len(available_pieces)}')
-
-        total = 0
 
         for piece_id in available_pieces:
-            for chirality in range(2):
-                if self.piece_names[piece_id] == "R" and chirality == 1:
-                    continue
-                for rotation in range(4):
-                    if self.piece_names[piece_id] in ["R", "Z", "C"] and rotation >= 2:
-                        continue
-                    for position in range(43):
-                        total += 1
-                        # for position in valid_positions:
-                        if self._is_valid_placement(piece_id, chirality, rotation, position):
-                            action = self.encode_action(piece_id, chirality, rotation, position)
-                            mask[action] = True
-        # print(f'final # of valid actions {np.flatnonzero(mask).size}')
-        # print(f'total # of actions {total}')
+            for chirality, rotation, position in self._iter_valid_placements(piece_id):
+                action = self.encode_action(piece_id, chirality, rotation, position)
+                mask[action] = True
 
         self._cached_action_masks = mask
         return mask
@@ -422,6 +418,40 @@ class APADEnv(gym.Env):
         ax.set_xticks([])
         ax.set_yticks([])
         plt.show()
+
+    def _iter_valid_placements(self, piece_id):
+        """Iterate over valid (chirality, rotation, position) for a piece.
+
+        This is the single source of truth for valid placement iteration,
+        used by both backtracking (direct placements) and RL (action masks).
+        """
+        for chirality in range(2):
+            if self.piece_names[piece_id] == "R" and chirality == 1:
+                continue
+            for rotation in range(4):
+                if self.piece_names[piece_id] in ["R", "Z", "C"] and rotation >= 2:
+                    continue
+                for position in range(43):
+                    if self._is_valid_placement(piece_id, chirality, rotation, position):
+                        yield (chirality, rotation, position)
+
+    def get_valid_placements(self, piece_id):
+        """Get list of valid (chirality, rotation, position) tuples for a piece.
+
+        Use this for backtracking to avoid action encoding overhead.
+        """
+        return list(self._iter_valid_placements(piece_id))
+
+    def get_valid_actions_for_piece(self, piece_id):
+        """Get list of valid action IDs for a piece."""
+        return [
+            self.encode_action(piece_id, c, r, p)
+            for c, r, p in self._iter_valid_placements(piece_id)
+        ]
+
+    def count_valid_actions_for_piece(self, piece_id):
+        """Count valid placements for a specific piece."""
+        return sum(1 for _ in self._iter_valid_placements(piece_id))
 
     def visualize_ascii(self):
         for row in self.grid:
