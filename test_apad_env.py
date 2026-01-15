@@ -49,6 +49,40 @@ class TestBasicEnvironment:
         valid = env._is_valid_placement(0, 0, 0, 6)
         assert not valid
 
+    def test_is_valid_placement_comprehensive(self, env_no_date):
+        """Comprehensive test of _is_valid_placement edge cases.
+
+        Tests bounds checking, occupancy checking, and various piece configurations.
+        Critical test for pure Python optimization of _is_valid_placement.
+        """
+        # Test 1: Valid placement in open space
+        assert env_no_date._is_valid_placement(0, 0, 0, 14)  # K piece at (2,0)
+
+        # Test 2: Out of bounds - bottom edge (K piece extends 3 rows down)
+        assert not env_no_date._is_valid_placement(0, 0, 0, 35)  # K at (5,0) extends to row 8
+
+        # Test 3: Out of bounds - right edge (K piece extends 1 col right)
+        assert not env_no_date._is_valid_placement(0, 0, 0, 6)  # K piece at (0,6)
+
+        # Test 4: Out of bounds - bottom-right corner
+        assert not env_no_date._is_valid_placement(0, 0, 0, 48)  # K piece at (6,6)
+
+        # Test 5: Occupancy - place piece then check overlap
+        env_no_date._place_piece_components(0, 0, 0, 14)  # Place K at (2,0)
+        # Try to place A piece overlapping with K
+        assert not env_no_date._is_valid_placement(1, 0, 0, 14)  # A at same position
+
+        # Test 6: Different chirality
+        env_no_date.reset()
+        assert env_no_date._is_valid_placement(1, 1, 0, 14)  # A piece flipped
+
+        # Test 7: Different rotation
+        assert env_no_date._is_valid_placement(1, 0, 1, 14)  # A piece rotated
+
+        # Test 8: Small piece (R - rectangle) in various positions
+        assert env_no_date._is_valid_placement(4, 0, 0, 0)  # R at top-left
+        assert env_no_date._is_valid_placement(4, 0, 0, 28)  # R at (4,0)
+
     def test_piece_placement_marks_grid(self, env):
         if env._is_valid_placement(0, 0, 0, 14):
             env._place_piece_components(0, 0, 0, 14)
