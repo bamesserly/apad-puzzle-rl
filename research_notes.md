@@ -141,6 +141,25 @@ Misc ideas:
   10-15 faces in about 10 ways. So 28x15x10=4500 two-piece combos.
 
 
+# 2026-01-14 Backtracking work
+
+- find_all mode doesn't stop at first solution
+- with ipywidgets, print solutions (slow update) separately from search tree (fast update)
+- Transposition table memoization - caches grid.tobytes() to prune duplicate board states in find_all mode. I think this will be a huge timesave. It'll hit more and more boards it's seen before the longer it goes.
+- In running find_all mode for 4/14, interested to find more than 50 solutions!
+- In find_all mode, we start by searching one piece (the rectangle) and we
+  search all its placements and their paths. After that we're done. We've
+  checked everything there is to check.
+
+Ideas:
+
+- Parallel root search - detailed plan saved in parallel_solver_plan.md
+    - depth0-level parallelization (distribute X starting piece placements across Y workers)
+    - Compact progress display showing all workers
+    - Solution deduplication across workers
+- Fixed ID ordering vs MRV heuristic
+- Board symmetry handling (clarified already handled at piece level)
+- Memory usage profiling (~1.5GB currently, seems acceptable)
 
 
 
