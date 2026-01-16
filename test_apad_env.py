@@ -194,6 +194,96 @@ class TestActionMasking:
             # Should have fewer valid actions after placing piece
             assert valid_after.size < valid_before.size
 
+    def test_island_masking_blocks_island_moves(self):
+        """Test that island masking prevents island-creating moves"""
+        env_masked = APADEnv(1, 10, mask_islands=True)
+        env_masked.reset()
+
+        # Try multiple random valid moves
+        for _ in range(10):
+            mask = env_masked.action_masks()
+            valid_actions = np.flatnonzero(mask)
+
+            if valid_actions.size == 0:
+                break
+
+            # Pick random valid action
+            action = np.random.choice(valid_actions)
+
+            # Verify it doesn't create islands
+            checkpoint = env_masked.save_state()
+            env_masked._place_piece(action)
+            assert not has_islands(env_masked.grid), "Island masking allowed island-creating move"
+            env_masked.load_state(checkpoint)
+
+            # Actually take the step
+            env_masked.step(action)
+
+    def test_island_masking_allows_non_island_moves(self):
+        """Test that island masking still allows valid non-island moves"""
+        env_masked = APADEnv(1, 10, mask_islands=True)
+        env_masked.reset()
+
+        mask = env_masked.action_masks()
+        valid_actions = np.flatnonzero(mask)
+
+        # Should have some valid actions
+        assert valid_actions.size > 0, "Island masking blocked all moves"
+
+    def test_island_masking_reduces_action_space(self):
+        """Test that island masking typically reduces available actions"""
+        env_unmasked = APADEnv(1, 10, mask_islands=False)
+        env_masked = APADEnv(1, 10, mask_islands=True)
+
+        env_unmasked.reset()
+        env_masked.reset()
+
+        # Place a few pieces to create a state where islands are possible
+        for _ in range(3):
+            mask_unmasked = env_unmasked.action_masks()
+            valid_unmasked = np.flatnonzero(mask_unmasked)
+
+            if valid_unmasked.size == 0:
+                break
+
+            action = valid_unmasked[0]
+            env_unmasked.step(action)
+
+            # Copy state to masked env
+            env_masked.grid = env_unmasked.grid.copy()
+            env_masked.remaining_pieces = env_unmasked.remaining_pieces.copy()
+            env_masked._cached_action_masks = None
+
+        mask_unmasked = env_unmasked.action_masks()
+        mask_masked = env_masked.action_masks()
+
+        valid_unmasked = np.flatnonzero(mask_unmasked)
+        valid_masked = np.flatnonzero(mask_masked)
+
+        # Masked should have same or fewer actions
+        assert valid_masked.size <= valid_unmasked.size
+
+    def test_island_masking_full_episode(self):
+        """Test full episode with island masking never creates islands"""
+        env = APADEnv(1, 10, mask_islands=True)
+        obs, info = env.reset()
+
+        for _ in range(8):
+            mask = info["action_mask"]
+            valid_actions = np.flatnonzero(mask)
+
+            if valid_actions.size == 0:
+                break
+
+            action = np.random.choice(valid_actions)
+            obs, reward, terminated, truncated, info = env.step(action)
+
+            # Should never have islands
+            assert not has_islands(env.grid), "Islands created during masked episode"
+
+            if terminated or truncated:
+                break
+
 
 class TestGameplay:
     """Test actual gameplay mechanics"""

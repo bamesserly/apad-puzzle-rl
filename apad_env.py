@@ -107,7 +107,7 @@ def has_islands(grid):
 # <0 -> do not use any date (don't randomize on reset)
 # other -> selected date (don't randomize on reset)
 class APADEnv(gym.Env):
-    def __init__(self, mon=None, day=None, handicap=0):
+    def __init__(self, mon=None, day=None, handicap=0, mask_islands=False):
         super().__init__()
 
         # piece_id is the index of this array
@@ -116,6 +116,7 @@ class APADEnv(gym.Env):
         self.valid_spaces = 43
         self.invalid_positions = {(0, 6), (1, 6), (6, 3), (6, 4), (6, 5), (6, 6)}
         self.handicap = handicap
+        self.mask_islands = mask_islands
         self.episode_reward = 0
 
         # 8 pieces × 2 chirality × 4 rotations × 43 positions = 2752
@@ -327,7 +328,17 @@ class APADEnv(gym.Env):
         for piece_id in available_pieces:
             for chirality, rotation, position in self._iter_valid_placements(piece_id):
                 action = self.encode_action(piece_id, chirality, rotation, position)
-                mask[action] = True
+
+                if self.mask_islands:
+                    checkpoint = self.save_state()
+                    self._place_piece(action)
+                    creates_islands = has_islands(self.grid)
+                    self.load_state(checkpoint)
+
+                    if not creates_islands:
+                        mask[action] = True
+                else:
+                    mask[action] = True
 
         self._cached_action_masks = mask
         return mask

@@ -161,6 +161,44 @@ Ideas:
 - Board symmetry handling (clarified already handled at piece level)
 - Memory usage profiling (~1.5GB currently, seems acceptable)
 
+# 2026-01-16 Hybrid RL-Solver Approach
+
+New idea: agent places first 5 pieces, solver checks if remaining 3 can complete. Makes problem look stochastic to agent since it's hard to predict solvability at 5/8.
+
+Implemented:
+- HybridAPADEnv: agent does 5 pieces, solver finishes and returns binary reward (1.0 solvable, 0.0 not)
+- Island masking: `mask_islands=True` prevents island-creating moves via place-check-restore in action_masks()
+- Training: 8 parallel envs, stay on same boards for 500k steps before switching
+
+First training run (1.3M steps, 7.5hrs):
+- WITH mask_islands=True
+- Got to mean ep_len ~4.7, mean reward ~0.04
+- Still not reaching 5 pieces consistently
+- FPS dropped at end (maybe more solver calls?)
+
+Observations:
+- Board half-full at 4 pieces, natural to brick after only 4 valid moves
+- Island masking isn't too restrictive - those moves ARE invalid, they brick the game
+- Action space naturally shrinks, if empty by move 4 then first 4 moves were bad
+- Don't have visibility into: % eps reaching 5 pieces, truncation vs termination breakdown
+
+Speed is the problem. 6+ hours for 1M steps WITH 8 parallel envs.
+
+Ideas brewing:
+- Train on AWS or better machine (16G M1 vs this 8G M3)
+- Better logging: what % reach 5 pieces, details of those rare cases (board, moves, remaining action space size)
+- Heavy exploration for this agent? Maybe even random? More rollouts > smart moves for learning what board states are solvable
+- Unproven heuristics (reluctant): reward for fewer disconnected regions, larger action space, edge vs middle placement
+- **Curriculum learning on known solutions** - this one's exciting:
+  - We have 53 solutions for 4/14 from solver
+  - Cache all possible 3-4 piece states from those solutions
+  - During training: pop 5 random actions from a valid solution path
+  - Agent chooses from full action space
+  - Big reward if it picks one of the cached valid moves
+  - No solver calls needed during training, just lookup
+
+The curriculum idea: train agent to recognize "this 4-piece state can lead to a solution" by showing it thousands of examples from known solution paths. Once it learns that, maybe it can generalize.
+
 
 
 
