@@ -236,6 +236,34 @@ def _get_tree_observer(observers):
     return None
 
 
+def solve_from_env(env, find_all=False):
+    """Solve puzzle starting from current env state.
+
+    Args:
+        env: APADEnv instance with some pieces already placed
+        find_all: Whether to find all solutions
+
+    Returns:
+        dict with 'solved', 'num_solutions' (if find_all), 'time_ms', 'nodes_explored'
+    """
+    config = SearchConfig(find_all=find_all, verbose_depth=0)
+    state = SearchState(config)
+
+    solved = _backtrack(env, state, observers=[], depth=0)
+
+    stats = state.get_stats()
+    result = {
+        "solved": solved if not find_all else len(state.solutions) > 0,
+        "time_ms": stats["time_ms"],
+        "nodes_explored": stats["nodes_explored"],
+    }
+
+    if find_all:
+        result["num_solutions"] = len(state.solutions)
+
+    return result
+
+
 def benchmark_dates(n_samples=10, verbose=False):
     """Benchmark solver on random dates.
 

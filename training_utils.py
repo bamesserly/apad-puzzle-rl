@@ -83,3 +83,24 @@ def make_env(mo=None, day=None):
     else:
         env = APADEnv(mo, day)  # fixed board
     return Monitor(env)
+
+
+def make_hybrid_env(mo=None, day=None, agent_pieces=5, mask_islands=False):
+    """Create monitored Hybrid APAD environment
+
+    Args:
+        mo: Month (1-12) or None for random board
+        day: Day (1-31) or None for random board
+        agent_pieces: How many pieces agent places before solver check
+        mask_islands: Mask island-creating moves from action space
+
+    Returns:
+        Monitored HybridAPADEnv instance
+    """
+    from hybrid_env import HybridAPADEnv
+
+    if mo is None or day is None:
+        env = HybridAPADEnv(agent_pieces=agent_pieces, mask_islands=mask_islands)
+    else:
+        env = HybridAPADEnv(mo, day, agent_pieces=agent_pieces, mask_islands=mask_islands)
+    return Monitor(env)
