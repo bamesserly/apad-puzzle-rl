@@ -1,8 +1,12 @@
 import numpy as np
 import pytest
 from gymnasium.utils.env_checker import check_env
+from stable_baselines3.common.vec_env import DummyVecEnv
 
-from apad_env import APADEnv, has_islands
+from apad_puzzle_rl.envs.apad_env import APADEnv, has_islands
+from apad_puzzle_rl.envs.curriculum_env import CurriculumAPADEnv
+from apad_puzzle_rl.resources.solutions_4_14 import SOLUTIONS
+from apad_puzzle_rl.training_utils import CurriculumProgressionCallback
 
 
 @pytest.fixture
@@ -399,3 +403,259 @@ class TestStressTests:
 
         # If we got here without exceptions, tests pass
         assert True
+
+
+class TestSolutionData:
+    """Validate integrity of solution data for April 14"""
+
+    def test_solutions_count(self):
+        """Verify we have expected number of solutions"""
+        assert len(SOLUTIONS) > 0, "No solutions found"
+        # Currently 47 solutions
+        assert len(SOLUTIONS) == 47
+
+    def test_solutions_format(self):
+        """Check each solution has exactly 8 actions"""
+        for i, solution in enumerate(SOLUTIONS):
+            assert len(solution) == 8, f"Solution {i} has {len(solution)} actions, expected 8"
+            # All actions should be valid integers
+            for action in solution:
+                assert isinstance(action, int), f"Action {action} in solution {i} is not an int"
+                assert 0 <= action < 2752, f"Action {action} in solution {i} out of range"
+
+    def test_solutions_unique_pieces(self):
+        """Verify each solution uses all 8 pieces exactly once"""
+        for i, solution in enumerate(SOLUTIONS):
+            pieces_used = set()
+            for action in solution:
+                # Decode to get piece_id
+                piece_id = action // 344  # 344 = 2 * 4 * 43
+                pieces_used.add(piece_id)
+
+            assert (
+                len(pieces_used) == 8
+            ), f"Solution {i} uses {len(pieces_used)} unique pieces, expected 8"
+
+    def test_all_solutions_playable(self):
+        """Play through each solution to verify validity"""
+        env = APADEnv(4, 14)
+
+        for i, solution in enumerate(SOLUTIONS):
+            env.reset()
+
+            for step, action in enumerate(solution):
+                # Check action is valid
+                mask = env.action_masks()
+                assert mask[action], f"Solution {i}, step {step}: action {action} not in mask"
+
+                # Take action
+                obs, reward, terminated, truncated, info = env.step(action)
+
+                # Should not terminate early
+                if step < 7:
+                    assert not terminated, f"Solution {i} terminated early at step {step}"
+
+            # After all 8 pieces, should have won
+            assert np.sum(env.remaining_pieces) == 0, f"Solution {i} didn't place all pieces"
+
+
+class TestCurriculumEnv:
+    """Test CurriculumAPADEnv functionality"""
+
+    def test_curriculum_env_initialization(self):
+        """Check pieces_remaining parameter works"""
+        env = CurriculumAPADEnv(4, 14, pieces_remaining=2)
+        assert env.pieces_remaining == 2
+
+        env = CurriculumAPADEnv(4, 14, pieces_remaining=7)
+        assert env.pieces_remaining == 7
+
+    def test_reset_creates_partial_board(self):
+        """Verify reset places correct number of pieces from solution"""
+        env = CurriculumAPADEnv(4, 14, pieces_remaining=2)
+        obs, info = env.reset()
+
+        # Should have placed 6 pieces (8 - 2)
+        pieces_placed = np.sum(~env.remaining_pieces)
+        assert pieces_placed == 6
+
+        # Grid should have occupied cells (each piece is 5-6 cells)
+        occupied = np.sum(env.grid > 0)
+        assert 30 <= occupied <= 36, f"Expected 30-36 occupied cells, got {occupied}"
+
+    def test_valid_actions_set(self):
+        """Check valid_actions contains remaining pieces from solution"""
+        env = CurriculumAPADEnv(4, 14, pieces_remaining=3)
+        obs, info = env.reset()
+
+        # Should have 3 valid actions (remaining pieces in solution)
+        assert len(env.valid_actions) == 3
+
+        # All valid actions should be valid integers
+        for action in env.valid_actions:
+            assert isinstance(action, int)
+            assert 0 <= action < 2752
+
+    def test_step_rewards_valid_action(self):
+        """Verify reward=1.0 for actions in valid set"""
+        env = CurriculumAPADEnv(4, 14, pieces_remaining=2)
+        obs, info = env.reset()
+
+        # Pick one of the valid actions
+        valid_action = list(env.valid_actions)[0]
+
+        # Ensure it's in the action mask
+        mask = env.action_masks()
+        if mask[valid_action]:
+            obs, reward, terminated, truncated, info = env.step(valid_action)
+            assert reward == 1.0, f"Expected reward 1.0 for valid action, got {reward}"
+            assert terminated, "Episode should terminate after one action"
+
+    def test_step_rewards_invalid_action(self):
+        """Verify reward=0.0 for actions not in valid set"""
+        env = CurriculumAPADEnv(4, 14, pieces_remaining=2)
+        obs, info = env.reset()
+
+        # Find an action that's valid (in mask) but not in valid_actions set
+        mask = env.action_masks()
+        valid_masked = np.flatnonzero(mask)
+
+        invalid_action = None
+        for action in valid_masked:
+            if action not in env.valid_actions:
+                invalid_action = action
+                break
+
+        if invalid_action is not None:
+            obs, reward, terminated, truncated, info = env.step(invalid_action)
+            assert reward == 0.0, f"Expected reward 0.0 for invalid action, got {reward}"
+            assert terminated, "Episode should terminate after one action"
+
+    def test_episode_terminates_after_one_action(self):
+        """Check episode always ends after 1 piece"""
+        env = CurriculumAPADEnv(4, 14, pieces_remaining=5)
+        obs, info = env.reset()
+
+        mask = env.action_masks()
+        valid_actions = np.flatnonzero(mask)
+        assert valid_actions.size > 0
+
+        action = valid_actions[0]
+        obs, reward, terminated, truncated, info = env.step(action)
+
+        assert terminated or truncated, "Episode should end after one action"
+        assert info["l"] == 1, "Episode length should be 1"
+
+    def test_curriculum_level_change(self):
+        """Test set_curriculum_level() updates difficulty"""
+        env = CurriculumAPADEnv(4, 14, pieces_remaining=2)
+        assert env.pieces_remaining == 2
+
+        env.set_curriculum_level(5)
+        assert env.pieces_remaining == 5
+
+        # Reset and verify new level is used
+        obs, info = env.reset()
+        pieces_placed = np.sum(~env.remaining_pieces)
+        assert pieces_placed == 3  # 8 - 5 = 3
+
+    def test_different_curriculum_levels(self):
+        """Test levels 2-7 all work correctly"""
+        for level in range(2, 8):
+            env = CurriculumAPADEnv(4, 14, pieces_remaining=level)
+            obs, info = env.reset()
+
+            # Verify correct number of pieces placed
+            pieces_placed = np.sum(~env.remaining_pieces)
+            expected_placed = 8 - level
+            assert (
+                pieces_placed == expected_placed
+            ), f"Level {level}: expected {expected_placed} pieces placed, got {pieces_placed}"
+
+            # Verify valid_actions has correct size
+            assert (
+                len(env.valid_actions) == level
+            ), f"Level {level}: expected {level} valid actions, got {len(env.valid_actions)}"
+
+            # Verify action masks work
+            mask = env.action_masks()
+            assert np.sum(mask) > 0, f"Level {level}: no valid actions in mask"
+
+
+class TestCurriculumProgression:
+    """Test automatic curriculum advancement callback"""
+
+    def test_progression_callback_advances_level(self):
+        """Simulate high success rate, verify level increases"""
+
+        # Create vectorized env starting at level 2
+        def make_env():
+            return CurriculumAPADEnv(4, 14, pieces_remaining=2)
+
+        vec_env = DummyVecEnv([make_env])
+        callback = CurriculumProgressionCallback(
+            vec_env, success_threshold=0.8, min_episodes=10, verbose=0
+        )
+
+        # Simulate 10 successful episodes
+        for _ in range(10):
+            callback.episode_results.append(True)
+
+        # Manually create info dict with episode and reward info
+        callback.locals = {"infos": [{"episode": {"l": 1}, "r": 1.0}]}
+
+        # Trigger callback
+        callback._on_step()
+
+        # Should advance to level 3
+        current_level = vec_env.get_attr("pieces_remaining")[0]
+        assert current_level == 3, f"Expected level 3, got {current_level}"
+
+    def test_progression_callback_stays_at_low_success(self):
+        """Simulate low success, verify level doesn't change"""
+
+        def make_env():
+            return CurriculumAPADEnv(4, 14, pieces_remaining=2)
+
+        vec_env = DummyVecEnv([make_env])
+        callback = CurriculumProgressionCallback(
+            vec_env, success_threshold=0.8, min_episodes=10, verbose=0
+        )
+
+        # Simulate 10 episodes with only 50% success (below threshold)
+        for i in range(10):
+            callback.episode_results.append(i % 2 == 0)
+
+        # Manually create info dict
+        callback.locals = {"infos": [{"episode": {"l": 1}, "r": 0.0}]}
+
+        # Trigger callback
+        callback._on_step()
+
+        # Should stay at level 2
+        current_level = vec_env.get_attr("pieces_remaining")[0]
+        assert current_level == 2, f"Expected level 2, got {current_level}"
+
+    def test_progression_callback_stops_at_max(self):
+        """Verify doesn't try to advance beyond level 7"""
+
+        def make_env():
+            return CurriculumAPADEnv(4, 14, pieces_remaining=7)
+
+        vec_env = DummyVecEnv([make_env])
+        callback = CurriculumProgressionCallback(
+            vec_env, success_threshold=0.8, min_episodes=10, verbose=0
+        )
+
+        # Simulate 10 successful episodes at max level
+        for _ in range(10):
+            callback.episode_results.append(True)
+
+        callback.locals = {"infos": [{"episode": {"l": 1}, "r": 1.0}]}
+
+        # Trigger callback
+        callback._on_step()
+
+        # Should stay at level 7 (max)
+        current_level = vec_env.get_attr("pieces_remaining")[0]
+        assert current_level == 7, f"Expected level 7 (max), got {current_level}"

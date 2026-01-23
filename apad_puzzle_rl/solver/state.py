@@ -3,7 +3,7 @@
 import time
 from dataclasses import dataclass
 
-from apad_env import has_islands
+from apad_puzzle_rl.envs.apad_env import has_islands
 
 
 @dataclass

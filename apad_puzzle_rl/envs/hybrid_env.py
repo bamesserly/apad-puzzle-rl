@@ -2,8 +2,8 @@
 
 import numpy as np
 
-from apad_env import APADEnv, has_islands
-from solver.core import solve_from_env
+from apad_puzzle_rl.envs.apad_env import APADEnv, has_islands
+from apad_puzzle_rl.solver.core import solve_from_env
 
 
 class HybridAPADEnv(APADEnv):
