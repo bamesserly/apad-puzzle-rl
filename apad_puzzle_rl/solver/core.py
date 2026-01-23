@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from apad_env import APADEnv
+from apad_puzzle_rl.envs.apad_env import APADEnv
 
 from .observers import (
     FindAllSolutionsObserver,

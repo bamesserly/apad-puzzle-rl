@@ -6,8 +6,9 @@ build-backend = "setuptools.build_meta"
 name = "apad-puzzle-rl"
 version = "0.1.0"
 
-[tool.setuptools]
-py-modules = ["apad_env", "training_utils"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["apad_puzzle_rl*"]
 
 [tool.pytest.ini_options]
 testpaths = ["."]

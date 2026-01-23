@@ -199,27 +199,105 @@ Ideas brewing:
 
 The curriculum idea: train agent to recognize "this 4-piece state can lead to a solution" by showing it thousands of examples from known solution paths. Once it learns that, maybe it can generalize.
 
+# 2026-01-16 Curriculum Learning Implementation
 
+Pivoting from hybrid approach (too slow, plateaued at 4.7 pieces) to curriculum learning on known solutions.
 
+## Approach
 
+Train agent on partial board states extracted from 47 complete solutions for April 14. Agent sees board with N pieces already placed (from a valid solution), must choose next piece. Reward +1 if chosen action continues along any valid solution path, 0 otherwise.
 
+**Key insight:** Start with late game (2 pieces remaining = easiest) and work backward to early game (7 pieces remaining = hardest). Late game has fewer options, clearer consequences, faster learning.
 
+**Speed advantages:**
+- Episodes are 1 move each → blazingly fast
+- No solver calls during training (just hash lookup)
+- Action space naturally smaller in late game
 
+## Implementation
 
+**envs/curriculum_env.py:**
+- `CurriculumAPADEnv`: extends APADEnv
+- `reset()`: chooses random solution, places first M pieces, stores valid next actions as set
+- `step()`: agent places 1 piece, episode ends, reward based on membership in valid set
+- `pieces_remaining` parameter controls curriculum level (2-7)
+- Island masking OFF - agent learns naturally what works
 
+**Curriculum progression:**
+- Start: 2 pieces remaining (place 6, agent picks from 2)
+- Advance when agent hits 80% success over 100 episodes
+- Progress: 2 → 3 → 4 → 5 → 6 → 7 pieces remaining
+- `CurriculumProgressionCallback` handles automatic advancement
 
+**Repo reorganization:**
+- Created `envs/`, `data/`, `notebooks/` directories
+- Moved apad_env.py, hybrid_env.py to envs/
+- Encoded 04-14_solutions.py → data/solutions_4_14.py (action IDs)
+- Training notebook: notebooks/train_curriculum.ipynb
 
+**Rewards:**
+- +1 for valid action (in solution set)
+- 0 for invalid action
+- No negative rewards, no intermediate shaping
+- Binary classification task with immediate feedback
 
+**Future extensions:**
+- Multi-action episodes (place 2-3 pieces before episode ends)
+- Expand to more dates beyond 4/14
+- Test generalization to unseen dates
 
+This approach sidesteps the speed problem entirely and gives clear supervised learning signal. Agent learns to recognize "good board states" through pattern matching across thousands of partial solution examples.
 
+# 2026-01-23 Success with Curriculum Learning
 
+The curriculum strategy described in the previous entry ultimately led to success with specifically 4/14. Finally a small victory.
 
+And we had to get over some hurdles:
 
+- Instead of removing random pieces to generate solutions, we always removed
+  the last piece in the solution, as listed in the official list. So only 47
+  different solutions, not C(8,N) x 47 solutions.
+- Originally tried to increase difficulty level (i.e. need to place one more
+  piece, i.e. back the game state up from N pieces placed to N-1 pieces placed)
+  upon reaching a certain successful placement threshold. That threshold %
+  needed to be rolling and reset at each level.
+- Anyways, we eventually switched to training N steps for each level, manually,
+  and not auto-incrementing. With all the above troubles, I wanted to validate
+  the ability of the model at each level. And never switched back to
+  auto-increment. Probably could now, though.
+- Forgetting: even though we resumed lvl N training from the lvl N-1 model,
+  performance on easier levels started dipping. Lvl5 model could no longer
+  complete lvl4 as well. This could have been related to high learning rate
+  (default, 1e-3?) and/or the introduction or "replays" solved it. Replay
+  means: 20% of steps are random samples from the earlier levels.
 
+After these changes, we saw steady progress with each model level.
 
+![Curriculum model comparison](imgs/2026-01-23_curriculum_model_compare.png)
 
+```bash
+================================================================================
+SUMMARY TABLE
+================================================================================
+Model                     L2       L3       L4       L5       L6       L7      
+--------------------------------------------------------------------------------
+v5 (bugs)                 97.1%    85.7%    67.2%    48.9%    30.3%    19.8% 
+lvl2                      99.8%    82.6%    50.9%    21.0%    8.4%     2.3%    
+lvl3                      98.4%    96.3%    80.3%    49.7%    21.5%    8.1%    
+lvl4                      97.0%    92.1%    82.6%    64.8%    42.8%    31.3%   
+lvl5                      99.4%    94.9%    84.0%    76.9%    57.8%    46.1%   
+lvl6                      98.9%    96.7%    91.7%    83.4%    77.3%    71.0%   
+lvl7                      99.2%    97.1%    92.8%    89.5%    81.8%    79.5%   
+```
 
+So we're now completing 4/14 80% of the time.
 
+This is pretty good, but reality check: this is horrible. We can't even
+guarantee a win for a single date? Remember, we trained on 4/14, and we're
+evaluating here on 4/14, and we can't guarantee win? This is lousy.
+
+I think we've got some promising next steps, but we're so far from beating it,
+I might explore other routes next.
 
 
 
