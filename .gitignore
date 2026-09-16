@@ -1,5 +1,6 @@
 *.zip
 *logs*
+*[Cc]ache*
 CLAUDE.md
 .claude/
 
