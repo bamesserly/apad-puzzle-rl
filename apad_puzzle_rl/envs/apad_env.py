@@ -144,7 +144,7 @@ class APADEnv(gym.Env):
         ]
         if self.mon is None:
             self.grid[valid_positions[randint(1, 12) - 1]] = -1
-        elif 1 <= self.mon <= 31:
+        elif 1 <= self.mon <= 12:
             self.grid[valid_positions[self.mon - 1]] = -1
         else:
             pass
@@ -175,7 +175,7 @@ class APADEnv(gym.Env):
         ]
         if self.mon is None:
             self.grid[valid_positions[randint(1, 12) - 1]] = -1
-        elif 1 <= self.mon <= 31:
+        elif 1 <= self.mon <= 12:
             self.grid[valid_positions[self.mon - 1]] = -1
         else:
             pass
