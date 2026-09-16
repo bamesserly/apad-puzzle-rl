@@ -3,10 +3,10 @@ import pytest
 from gymnasium.utils.env_checker import check_env
 from stable_baselines3.common.vec_env import DummyVecEnv
 
-from apad_puzzle_rl.envs.apad_env import APADEnv, has_islands
-from apad_puzzle_rl.envs.curriculum_env import CurriculumAPADEnv
-from apad_puzzle_rl.resources.solutions_4_14 import SOLUTIONS
-from apad_puzzle_rl.training_utils import CurriculumProgressionCallback
+from apad_puzzle.envs.apad_env import APADEnv, has_islands
+from apad_puzzle.envs.curriculum_env import CurriculumAPADEnv
+from apad_puzzle.resources.solutions_4_14 import SOLUTIONS
+from apad_puzzle.training_utils import CurriculumProgressionCallback
 
 
 @pytest.fixture

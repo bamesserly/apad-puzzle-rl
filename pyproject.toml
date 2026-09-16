@@ -3,12 +3,12 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "apad-puzzle-rl"
+name = "apad-puzzle"
 version = "0.1.0"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["apad_puzzle_rl*"]
+include = ["apad_puzzle*"]
 
 [tool.pytest.ini_options]
 testpaths = ["."]

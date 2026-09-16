@@ -4,7 +4,7 @@ from collections import deque
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.monitor import Monitor
 
-from apad_puzzle_rl.envs.apad_env import APADEnv
+from apad_puzzle.envs.apad_env import APADEnv
 
 
 class TimerCallback(BaseCallback):
@@ -97,7 +97,7 @@ def make_hybrid_env(mo=None, day=None, agent_pieces=5, mask_islands=False):
     Returns:
         Monitored HybridAPADEnv instance
     """
-    from apad_puzzle_rl.envs.hybrid_env import HybridAPADEnv
+    from apad_puzzle.envs.hybrid_env import HybridAPADEnv
 
     if mo is None or day is None:
         env = HybridAPADEnv(agent_pieces=agent_pieces, mask_islands=mask_islands)
@@ -118,7 +118,7 @@ def make_curriculum_env(mo=4, day=14, pieces_remaining=2, replay_prob=0.0):
     Returns:
         Monitored CurriculumAPADEnv instance
     """
-    from apad_puzzle_rl.envs.curriculum_env import CurriculumAPADEnv
+    from apad_puzzle.envs.curriculum_env import CurriculumAPADEnv
 
     env = CurriculumAPADEnv(mo, day, pieces_remaining=pieces_remaining, replay_prob=replay_prob)
     return Monitor(env)

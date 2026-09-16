@@ -2,7 +2,7 @@
 
 import random
 
-from apad_puzzle_rl.envs.apad_env import APADEnv
+from apad_puzzle.envs.apad_env import APADEnv
 
 
 class CurriculumAPADEnv(APADEnv):
@@ -19,7 +19,7 @@ class CurriculumAPADEnv(APADEnv):
     @classmethod
     def _load_solutions(cls):
         if cls._solutions is None:
-            from apad_puzzle_rl.resources.solutions_4_14 import SOLUTIONS
+            from apad_puzzle.resources.solutions_4_14 import SOLUTIONS
 
             cls._solutions = SOLUTIONS
 
