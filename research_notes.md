@@ -116,6 +116,48 @@ Anyway, v1.2 is batch size 1000 with default n_steps, 2048, times our 8 agents -
 
 **Training Time** Seems like regardless of n_timesteps (which correlates to training time) we reach the same convergence. I assume this is due to the entropy coefficient schedule? We used to train really fast and I miss it. It's just so frustrating cutting a training off before it's definitely plateaued.
 
+# 2025-08-01
+
+My latest thinking is that we can, and maybe need to, essentially add more to the action masking. Specifically: (1) don't include in the action space moves that will create islands, and, more invasively but still kosher (?), (2) don't leave spaces open where no pieces fit.
+
+Ugh, (2) seems like too much. This problem may be better suited for MCST?
+
+OK the failure of the entropy schedule: the 90% timesteps progress <-> 90% training success issue may be because of the entropy schedule, which changed as a function of progress %. What I should have done is have the entropy change vs absolute # of timesteps! That's a potentially exciting lead I might want to chase.
+
+# 2025-08-03
+
+```
+# train on specific board for a long while, then switch
+def train_v4():
+    mo = random.randint(1, 12)
+    day = random.randint(1, 31)
+    env = SubprocVecEnv([lambda m=mo, d=day: make_env(m, d, handicap) for _ in range(4)])
+    model = MaskablePPO(
+        "MlpPolicy",
+        env,
+        tensorboard_log="./maskable_ppo_logs_18/",
+        verbose=1,
+    )
+    handicap = 0
+    steps = 400_000
+    for i in range(20):
+        mo = random.randint(1, 12)
+        day = random.randint(1, 31)
+        env = SubprocVecEnv([lambda m=mo, d=day: make_env(m, d, handicap) for _ in range(4)])
+        model.set_env(env)
+        reset = True if i == 0 else False
+        model.learn(total_timesteps=steps, reset_num_timesteps=reset, callback=TimerCallback())
+        model.save(f"mppo_model_4.1.{i}")
+```
+
+![v4.1](v4.1.png)
+
+Looks like we might have been onto something here? 4 agents trained on a single board for 400k steps then switched. Clearly in the second iteration, we had an easy board that most agents solved. Then we had mixed results between 4 and 6 steps. A couple 6.5's and 7's thrown in. Until the very end of training (of course), looks like we were converging at 7.
+
+OK so *maybe* this strategy was gonna get there. BUT I think I have a better idea: I have a handful of completed boards. And for N steps we're going to train on envs with a couple (random?) pieces removed. With just 3 pieces removed, say, the action space will be tiny and we should win very quickly. OK then maybe after we reliably win, we remove a 4th random piece.
+
+Yeah, how about: give an agent a random board with 2 pieces removed, train until we converge on 8/8. Then, say 100 times, switch to a different random board with two pieces removed. After 100 successful random two-piece-removals, move to 100 (or 1000) random three-piece removals. etc. until the board is bare. THEN repeat with a second date + solved board. Cool let's do it. Let's start with a single board. We'll need a remove_piece function, we have a handful solutions in ... `make_expert_data`.
+
 # 2026-01-13
 
 Was away for a while. Fresh eyes. Doing some reading: RL not historically well-suited to this exact cover problem. No randomness, obviously solvable by an algorithm/tree search, relatively large action space, discrete. Sudoku, 2048, 15-square not readily solved by RL. Certainly not the poster-children for RL.
